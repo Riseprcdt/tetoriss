@@ -1,0 +1,2198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レトロテトリス＆ぷよぷよ マルチユニバース拡張版</title>
+    <!-- Google Pixel Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PeerJS for P2P LAN/Online Multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-dark: #0a0a12;
+            --panel-bg: rgba(20, 20, 35, 0.85);
+            --neon-cyan: #00f3ff;
+            --neon-magenta: #ff0055;
+            --neon-yellow: #ffe600;
+            --neon-green: #00ff66;
+            --neon-orange: #ff9900;
+            --neon-purple: #b026ff;
+            --border-glow: #00f3ff;
+        }
+
+        body {
+            font-family: 'Press Start 2P', monospace;
+            background-color: var(--bg-dark);
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            user-select: none;
+            background-image: radial-gradient(circle at 50% 30%, #1a103c 0%, #05050b 100%);
+            min-height: 100vh;
+        }
+
+        /* CRT Screen Scanline Overlay Effect */
+        .crt-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .glow-cyan { text-shadow: 0 0 8px var(--neon-cyan), 0 0 20px var(--neon-cyan); }
+        .glow-magenta { text-shadow: 0 0 8px var(--neon-magenta), 0 0 20px var(--neon-magenta); }
+        .glow-yellow { text-shadow: 0 0 8px var(--neon-yellow), 0 0 20px var(--neon-yellow); }
+        .glow-green { text-shadow: 0 0 8px var(--neon-green), 0 0 20px var(--neon-green); }
+        .glow-purple { text-shadow: 0 0 8px var(--neon-purple), 0 0 20px var(--neon-purple); }
+
+        .border-glow-cyan {
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.4), inset 0 0 10px rgba(0, 243, 255, 0.2);
+            border: 2px solid var(--neon-cyan);
+        }
+
+        .border-glow-magenta {
+            box-shadow: 0 0 15px rgba(255, 0, 85, 0.4), inset 0 0 10px rgba(255, 0, 85, 0.2);
+            border: 2px solid var(--neon-magenta);
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+            background-color: #05050a;
+            border-radius: 4px;
+        }
+
+        .retro-btn {
+            position: relative;
+            background: linear-gradient(180deg, #2a2a40 0%, #151525 100%);
+            border: 2px solid #555588;
+            color: #fff;
+            padding: 10px 16px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            box-shadow: 0 4px 0 #11111d;
+            border-radius: 6px;
+        }
+
+        .retro-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 #11111d;
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        .retro-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #11111d;
+        }
+
+        .mode-card {
+            background: rgba(15, 15, 30, 0.85);
+            border: 2px solid #333355;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .mode-card:hover, .mode-card.selected {
+            border-color: var(--neon-cyan);
+            background: rgba(25, 25, 55, 0.95);
+            box-shadow: 0 0 12px rgba(0, 243, 255, 0.3);
+        }
+
+        .floating-text {
+            position: absolute;
+            animation: floatUpFade 1.2s ease-out forwards;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        @keyframes floatUpFade {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            50% { opacity: 1; transform: translateY(-20px) scale(1.1); }
+            100% { opacity: 0; transform: translateY(-40px) scale(0.9); }
+        }
+
+        /* Screen Shake Animation */
+        .shake {
+            animation: shakeAnim 0.18s ease-in-out;
+        }
+
+        @keyframes shakeAnim {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-4px, 4px); }
+            50% { transform: translate(4px, -3px); }
+            75% { transform: translate(-3px, -4px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        .toast-active {
+            animation: toastSlideDown 3.5s ease-in-out forwards;
+        }
+
+        @keyframes toastSlideDown {
+            0% { transform: translate(-50%, -100%); opacity: 0; }
+            15% { transform: translate(-50%, 20px); opacity: 1; }
+            85% { transform: translate(-50%, 20px); opacity: 1; }
+            100% { transform: translate(-50%, -100%); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen p-2 md:p-4 text-xs select-none">
+    <div class="crt-overlay"></div>
+
+    <!-- REAL-TIME ACHIEVEMENT TOAST BANNER -->
+    <div id="achievement-toast" class="fixed top-0 left-1/2 -translate-x-1/2 pointer-events-none z-50 opacity-0 bg-yellow-500/95 text-black border-2 border-yellow-300 px-5 py-3 rounded-xl shadow-lg shadow-yellow-500/50 flex items-center gap-3 font-sans">
+        <span class="text-2xl">🏆</span>
+        <div>
+            <div class="font-extrabold text-xs text-black">実績解除！（ACHIEVEMENT UNLOCKED）</div>
+            <div id="toast-title" class="font-bold text-sm text-amber-950 font-mono">称号名</div>
+        </div>
+    </div>
+
+    <!-- Header Title -->
+    <header class="text-center my-2 z-10 flex flex-col items-center">
+        <h1 class="text-xl md:text-3xl font-extrabold tracking-widest glow-cyan mb-1">RETRO TETRIS & PUYO</h1>
+        <div class="flex items-center gap-2">
+            <span id="header-mode-text" class="text-[10px] md:text-xs text-pink-400 tracking-wider">マルチモード・エクストリームエディション</span>
+            <button onclick="toggleSound()" id="sound-btn" class="bg-blue-900/60 border border-cyan-400/60 text-cyan-300 px-2 py-0.5 rounded text-[9px]">
+                🔊 サウンド ON
+            </button>
+            <button onclick="toggleAchievementsModal(true)" class="bg-yellow-500/20 border border-yellow-400/60 text-yellow-300 hover:bg-yellow-400 hover:text-black px-2 py-0.5 rounded text-[9px] transition-colors">
+                🏆 クエスト／実績
+            </button>
+        </div>
+    </header>
+
+    <main id="game-main-container" class="relative w-full max-w-5xl flex flex-col items-center justify-center z-10 my-auto">
+
+        <!-- START / MODE SELECTION OVERLAY MENU -->
+        <div id="start-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/95 border-glow-cyan rounded-xl p-3 md:p-5 z-30 transition-all duration-300 overflow-y-auto max-h-[92vh]">
+            <h2 class="text-sm md:text-lg text-yellow-300 mb-2 text-center glow-yellow">ゲームモードを選択（全10モード）<br><span class="text-[10px] text-gray-400 font-sans">多彩でスリリングな10種類のモードを楽しもう！</span></h2>
+            
+            <!-- MODE SELECTION GRID (EXPANDED TO 10 MODES) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 w-full max-w-4xl mb-3">
+                
+                <!-- MODE 1: VS AI TETRIS -->
+                <div onclick="selectMode('vs_ai')" id="mode-card-vs_ai" class="mode-card selected p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-cyan-400 font-bold text-[11px]">⚔️ ⚔️ 1v1 VS AI テトリス</span>
+                            <span class="text-[7px] bg-pink-500/30 text-pink-300 px-1 py-0.5 rounded border border-pink-500/40">VS AI</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">AIとテトリス対決！ラインを消して相手におじゃまブロックを送り込もう。</p>
+                    </div>
+                    <div id="ai-diff-container" class="mt-2 pt-1 border-t border-gray-700/80 flex items-center justify-between text-[8px]">
+                        <span class="text-gray-400">AI難易度：</span>
+                        <div class="flex gap-1">
+                            <button onclick="setAiDiff('easy', event)" id="diff-easy" class="px-1.5 py-0.5 rounded bg-green-950 border border-green-500/50 text-green-300">かんたん</button>
+                            <button onclick="setAiDiff('normal', event)" id="diff-normal" class="px-1.5 py-0.5 rounded bg-yellow-900 border border-yellow-400 text-yellow-300">ふつう</button>
+                            <button onclick="setAiDiff('hard', event)" id="diff-hard" class="px-1.5 py-0.5 rounded bg-pink-950 border border-pink-500/50 text-pink-300">むずかしい</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MODE 2: TETRIS VS PUYO AI (NEW CROSS BATTLE) -->
+                <div onclick="selectMode('vs_puyo_ai')" id="mode-card-vs_puyo_ai" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-purple-400 font-bold text-[11px]">⚔️ ⚔️ テトリス VS ぷよAI</span>
+                            <span class="text-[7px] bg-purple-500/30 text-purple-300 px-1 py-0.5 rounded border border-purple-500/40">NEW CROSS</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">こちらはテトリス！相手はぷよAI！ジャンルを超えたクロスバトル！</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-purple-300 font-sans">連鎖爆発 vs ライン消去</div>
+                </div>
+
+                <!-- MODE 3: 2P LOCAL BATTLE -->
+                <div onclick="selectMode('local_2p')" id="mode-card-local_2p" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-green-400 font-bold text-[11px]">👥 👥 2P ローカル対戦</span>
+                            <span class="text-[7px] bg-green-500/30 text-green-300 px-1 py-0.5 rounded border border-green-500/40">2P SAME</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">1つのキーボードで2人がリアルタイム1v1テトリスバトル！</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-gray-400 font-sans">P1: WASD / P2: 矢印キー</div>
+                </div>
+
+                <!-- MODE 4: LAN / ONLINE MULTI -->
+                <div onclick="selectMode('lan_multi')" id="mode-card-lan_multi" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-orange-400 font-bold text-[11px]">🌐 🌐 1v1 LAN/P2P マルチ</span>
+                            <span class="text-[7px] bg-orange-500/30 text-orange-300 px-1 py-0.5 rounded border border-orange-500/40">P2P ROOM</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">同じLAN／ネットワーク上でルームコードを使って友達と対戦！</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-orange-300 font-mono">P2Pルームコード対戦</div>
+                </div>
+
+                <!-- MODE 5: BOMB TETRIS (NEW) -->
+                <div onclick="selectMode('bomb_tetris')" id="mode-card-bomb_tetris" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-red-400 font-bold text-[11px]">💣 💣 爆弾テトリス</span>
+                            <span class="text-[7px] bg-red-500/30 text-red-300 px-1 py-0.5 rounded border border-red-500/40">NEW BOMB</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">爆弾ブロックを消すと**周囲3x3のブロックが爆発**！</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-red-300 font-sans">3x3連鎖爆発</div>
+                </div>
+
+                <!-- MODE 6: GARBAGE SURVIVAL (NEW) -->
+                <div onclick="selectMode('garbage_survival')" id="mode-card-garbage_survival" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-yellow-400 font-bold text-[11px]">🌋 🌋 おじゃまサバイバル</span>
+                            <span class="text-[7px] bg-yellow-500/30 text-yellow-300 px-1 py-0.5 rounded border border-yellow-500/40">NEW SURVIVAL</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">4秒ごとに下からおじゃまラインがせり上がる！生き残れ！</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-yellow-300 font-sans">限界サバイバル・タイムアタック</div>
+                </div>
+
+                <!-- MODE 7: ULTRA SPEED 20G (NEW) -->
+                <div onclick="selectMode('master_20g')" id="mode-card-master_20g" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-cyan-300 font-bold text-[11px]">⚡ ⚡ 20G マスタースピード</span>
+                            <span class="text-[7px] bg-cyan-500/30 text-cyan-300 px-1 py-0.5 rounded border border-cyan-500/40">NEW 20G</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">落下時間0ms！生成された瞬間に即着地（20G）！</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-cyan-300 font-sans">超高速スライド操作</div>
+                </div>
+
+                <!-- MODE 8: PUYO PUYO SOLO -->
+                <div onclick="selectMode('puyo')" id="mode-card-puyo" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-pink-400 font-bold text-[11px]">🟢 🟢 ぷよぷよ シングル</span>
+                            <span class="text-[7px] bg-pink-500/30 text-pink-300 px-1 py-0.5 rounded border border-pink-500/40">CHAIN</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">同じ色のぷよを4個以上つなげて連鎖爆発！</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-gray-400 font-sans flex justify-between">
+                        <span>ハイスコア：</span>
+                        <span id="best-puyo-score" class="text-pink-300 font-mono">0 pt</span>
+                    </div>
+                </div>
+
+                <!-- MODE 9: 40 LINES SPRINT -->
+                <div onclick="selectMode('sprint')" id="mode-card-sprint" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-yellow-300 font-bold text-[11px]">⏱️ ⏱️ 40ラインスプリント</span>
+                            <span class="text-[7px] bg-yellow-500/30 text-yellow-300 px-1 py-0.5 rounded border border-yellow-500/40">SPRINT</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">40ラインを最速で消すタイムアタック。</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-gray-400 font-sans flex justify-between">
+                        <span>ベストタイム：</span>
+                        <span id="best-sprint-time" class="text-yellow-300 font-mono">--:--.-</span>
+                    </div>
+                </div>
+
+                <!-- MODE 10: ENDLESS MARATHON -->
+                <div onclick="selectMode('marathon')" id="mode-card-marathon" class="mode-card p-2.5 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-green-400 font-bold text-[11px]">♾️ ♾️ エンドレスマラソン</span>
+                            <span class="text-[7px] bg-green-500/30 text-green-300 px-1 py-0.5 rounded border border-green-500/40">ENDLESS</span>
+                        </div>
+                        <p class="text-[8px] text-gray-300 font-sans leading-tight">10ライン消去するごとに速度が上がるクラシックマラソンモード。</p>
+                    </div>
+                    <div class="mt-2 text-[8px] text-gray-400 font-sans flex justify-between">
+                        <span>ハイスコア：</span>
+                        <span id="best-marathon-score" class="text-green-300 font-mono">0 pt</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- START GAME BUTTON -->
+            <button onclick="startSelectedGame()" class="retro-btn bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold px-8 py-2.5 text-xs md:text-sm mb-2">
+                🎮 🎮 選択したゲームを開始（START GAME）
+            </button>
+
+            <div class="flex flex-wrap justify-center gap-2">
+                <button onclick="toggleHowToPlayModal(true)" class="retro-btn text-cyan-300 text-[10px] py-1.5 border-cyan-400/50 hover:border-cyan-300 flex items-center gap-1">
+                    📖 📖 ゲーム説明
+                </button>
+                <button onclick="toggleAchievementsModal(true)" class="retro-btn text-yellow-300 text-[10px] py-1.5 border-yellow-400/50 hover:border-yellow-300 flex items-center gap-1">
+                    🏆 🏆 クエスト＆実績
+                </button>
+            </div>
+        </div>
+
+        <!-- LAN MULTI MODAL -->
+        <div id="lan-modal" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/95 border-glow-cyan rounded-xl p-6 z-40 overflow-y-auto">
+            <h3 class="text-lg text-orange-400 mb-2 font-bold glow-yellow">🌐 🌐 1v1 LAN / P2P マルチ対戦</h3>
+            <p class="text-[9px] text-gray-300 font-sans mb-4 text-center">ルームを作成するか、友達のルームコードを入力して対戦しよう！</p>
+
+            <div class="bg-gray-900 border border-gray-700 p-4 rounded-lg w-full max-w-md space-y-4 font-sans text-xs">
+                <div class="border-b border-gray-700 pb-3">
+                    <div class="font-bold text-cyan-300 mb-1">1. ルームを作成（HOST）</div>
+                    <div class="flex gap-2">
+                        <button onclick="hostLanGame()" class="retro-btn text-xs bg-cyan-800 hover:bg-cyan-700 py-1.5">ルームコード生成</button>
+                        <span id="my-room-code" class="text-yellow-300 font-mono text-sm self-center font-bold">---</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="font-bold text-green-400 mb-1">2. ルームに参加（JOIN）</div>
+                    <div class="flex gap-2">
+                        <input id="join-room-input" type="text" placeholder="ルームコードを入力（例：4821）" class="bg-black border border-gray-600 px-3 py-1.5 rounded text-white font-mono text-xs w-full uppercase" max="6">
+                        <button onclick="joinLanGame()" class="retro-btn text-xs bg-green-800 hover:bg-green-700 py-1.5 whitespace-nowrap">参加</button>
+                    </div>
+                </div>
+
+                <div id="lan-status-text" class="text-[10px] text-yellow-400 font-mono text-center pt-2">
+                    待機中…
+                </div>
+            </div>
+
+            <button onclick="toggleLanModal(false)" class="retro-btn mt-4 text-xs">
+                キャンセルして閉じる（CLOSE）
+            </button>
+        </div>
+
+        <!-- HOW TO PLAY / GAME RULES MODAL -->
+        <div id="howto-modal" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/95 border-glow-cyan rounded-xl p-6 z-40 overflow-y-auto">
+            <h3 class="text-lg text-cyan-300 mb-3 font-bold glow-cyan">📖 📖 ゲーム説明 & 모드 규칙</h3>
+            
+            <div class="bg-gray-900/90 border border-gray-700 rounded-lg p-4 text-[10px] text-gray-300 space-y-3 max-w-md text-left font-sans leading-relaxed">
+                <div>
+                    <span class="text-yellow-300 font-bold font-mono">1. 1. 新モード紹介</span>
+                    <p class="mt-0.5 text-gray-400">• <span class="text-purple-300">テトリス vs ぷよAI</span>: ジャンルを超えた異色のクロスバトル！</p>
+                    <p class="text-gray-400">• <span class="text-red-300">💣 爆弾テトリス</span>: 💣 💣 爆弾ブロックが消えると周囲3x3を爆破！</p>
+                    <p class="text-gray-400">• <span class="text-yellow-300">🌋 おじゃまサバイバル</span>: 一定間隔で下からおじゃまラインが出現！</p>
+                    <p class="text-gray-400">• <span class="text-cyan-300">20G 마스터</span>: Instant Dropで超高速落下！</p>
+                </div>
+
+                <div>
+                    <span class="text-yellow-300 font-bold font-mono">2. 2. キーボード操作</span>
+                    <div class="grid grid-cols-2 gap-1 mt-1 text-[9px] bg-black/40 p-2 rounded border border-gray-800 font-mono">
+                        <div>P1 : A/D (移動), W (回転), S (ソフトドロップ), Space (ハードドロップ)</div>
+                        <div>P2 : ←/→ (移動), ↑ (回転), ↓ (ソフトドロップ), Enter (ハードドロップ)</div>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="toggleHowToPlayModal(false)" class="retro-btn mt-4 text-xs">
+                닫기 (CLOSE)
+            </button>
+        </div>
+
+        <!-- QUESTS & ACHIEVEMENTS MODAL -->
+        <div id="achievements-modal" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/95 border-glow-cyan rounded-xl p-6 z-40 overflow-y-auto">
+            <h3 class="text-lg text-yellow-300 mb-2 font-bold glow-yellow">🏆 🏆 クエスト＆実績 목록</h3>
+            <p class="text-[9px] text-gray-400 font-sans mb-3">条件を達成して伝説の称号を獲得しよう！</p>
+            
+            <div id="quests-list-container" class="bg-gray-900/90 border border-gray-700 rounded-lg p-3 text-[10px] text-gray-300 space-y-2 max-w-md w-full max-h-72 overflow-y-auto text-left font-sans">
+                <!-- Dynamic Quests -->
+            </div>
+
+            <button onclick="toggleAchievementsModal(false)" class="retro-btn mt-4 text-xs">
+                닫기 (CLOSE)
+            </button>
+        </div>
+
+        <!-- GAME OVER / RESULT OVERLAY MENU -->
+        <div id="game-over-screen" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/92 border-glow-magenta rounded-xl p-6 z-30">
+            <h2 id="result-title" class="text-2xl md:text-4xl font-extrabold mb-2 glow-magenta">GAME OVER</h2>
+            <p id="result-subtitle" class="text-xs md:text-sm text-yellow-300 mb-4 font-sans text-center">結果メッセージ</p>
+            
+            <div id="result-stats-container" class="bg-gray-900/90 border border-gray-700 rounded-lg p-4 mb-5 w-full max-w-xs text-center space-y-2 font-mono">
+                <!-- Dynamic result stats -->
+            </div>
+
+            <button onclick="returnToMenu()" class="retro-btn">
+                MAIN MENU（メインメニュー）
+            </button>
+        </div>
+
+        <!-- GAMEPLAY BOARDS CONTAINER -->
+        <div class="w-full flex flex-col md:flex-row items-center justify-center gap-2 md:gap-6">
+
+            <!-- PLAYER 1 SIDE -->
+            <div id="player-container" class="relative flex flex-col items-center bg-gray-950/80 p-3 rounded-xl border-glow-cyan">
+                <div class="w-full flex justify-between items-center mb-2 px-1 border-b border-cyan-500/30 pb-2">
+                    <div>
+                        <div class="text-cyan-400 font-bold text-xs tracking-wider flex items-center gap-1">
+                            <span id="player-label-text">PLAYER 1（YOU）</span>
+                        </div>
+                        <div class="text-[9px] text-yellow-400 font-sans mt-0.5">
+                            称号： <span id="player-title-display" class="font-bold">ビギナー</span>
+                        </div>
+                        <div class="text-[9px] text-gray-400 font-sans mt-0.5">SCORE： <span id="player-score" class="text-yellow-300 text-xs font-mono">0</span></div>
+                    </div>
+                    <div class="text-right">
+                        <div id="mode-stat-label" class="text-[8px] text-gray-400">COMBO</div>
+                        <div id="mode-stat-value" class="text-cyan-300 text-xs font-mono">0</div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 items-start">
+                    <div class="relative">
+                        <canvas id="player-canvas" width="200" height="400" class="border border-cyan-500/40"></canvas>
+                    </div>
+
+                    <!-- SIDE HUD PANEL FOR PLAYER -->
+                    <div class="flex flex-col gap-2 w-16">
+                        <div class="flex flex-col items-center bg-gray-900/90 p-2 rounded border border-cyan-500/30">
+                            <span class="text-[8px] text-cyan-300 mb-1">NEXT</span>
+                            <canvas id="player-next-canvas" width="50" height="50"></canvas>
+                        </div>
+
+                        <!-- DYNAMIC SOLO MODE EXTRA DISPLAY -->
+                        <div id="solo-info-panel" class="hidden flex flex-col items-center bg-gray-900/90 p-2 rounded border border-cyan-500/30 text-center text-[8px]">
+                            <span id="info-label-1" class="text-gray-400">TIME</span>
+                            <span id="info-val-1" class="text-yellow-300 font-bold font-mono text-[9px] my-0.5">00:00</span>
+                            
+                            <span id="info-label-2" class="text-gray-400 mt-1">LINES</span>
+                            <span id="info-val-2" class="text-green-300 font-bold font-mono text-[9px] mt-0.5">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VS DIVIDER / STATUS PANEL -->
+            <div id="vs-divider" class="flex flex-row md:flex-col items-center justify-center gap-2 text-center py-1 md:py-0">
+                <div class="text-red-500 font-extrabold text-lg md:2xl tracking-tighter glow-magenta animate-pulse">VS</div>
+                <div class="bg-gray-900/80 border border-gray-700 px-3 py-1 rounded text-[9px] text-gray-300 font-sans">
+                    <span id="vs-sub-status">対戦相手</span>
+                </div>
+            </div>
+
+            <!-- PLAYER 2 / AI SIDE -->
+            <div id="ai-container" class="relative flex flex-col items-center bg-gray-950/80 p-3 rounded-xl border-glow-magenta">
+                <div class="w-full flex justify-between items-center mb-2 px-1 border-b border-pink-500/30 pb-2">
+                    <div>
+                        <div id="ai-label-text" class="text-pink-500 font-bold text-xs tracking-wider">対戦相手</div>
+                        <div class="text-[9px] text-gray-400 font-sans mt-0.5">SCORE： <span id="ai-score" class="text-yellow-300 text-xs font-mono">0</span></div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[8px] text-gray-400">COMBO</div>
+                        <div id="ai-combo" class="text-pink-300 text-xs font-mono">0</div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 items-start">
+                    <div class="flex flex-col items-center bg-gray-900/90 p-2 rounded border border-pink-500/30 w-16 order-2 md:order-1">
+                        <span class="text-[8px] text-pink-300 mb-1">NEXT</span>
+                        <canvas id="ai-next-canvas" width="50" height="50"></canvas>
+                    </div>
+
+                    <div class="relative order-1 md:order-2">
+                        <canvas id="ai-canvas" width="200" height="400" class="border border-pink-500/40"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- MOBILE / TOUCH CONTROLS -->
+    <footer class="w-full max-w-md mt-3 z-10">
+        <div class="grid grid-cols-5 gap-1 md:gap-2 px-2">
+            <button id="btn-left" class="retro-btn p-3 text-center text-sm font-bold">←</button>
+            <button id="btn-rotate" class="retro-btn p-3 text-center text-sm font-bold text-yellow-300">↻</button>
+            <button id="btn-right" class="retro-btn p-3 text-center text-sm font-bold">→</button>
+            <button id="btn-soft" class="retro-btn p-3 text-center text-sm font-bold text-cyan-300">↓</button>
+            <button id="btn-hard" class="retro-btn p-3 text-center text-xs font-bold text-pink-400">DROP</button>
+        </div>
+    </footer>
+
+    <script>
+        const COLS = 10;
+        const ROWS = 20;
+        const BLOCK_SIZE = 20;
+
+        const COLORS = [
+            null,
+            '#00f3ff', // 1: I - Cyan
+            '#ff0055', // 2: Z - Red/Magenta
+            '#00ff66', // 3: S - Green
+            '#ffe600', // 4: O - Yellow
+            '#ff9900', // 5: L - Orange
+            '#3366ff', // 6: J - Blue
+            '#cc00ff', // 7: T - Purple
+            '#666677', // 8: Garbage - Dark Gray
+            '#ff2222'  // 9: Bomb Block - Red
+        ];
+
+        const PUYO_COLORS = [
+            null,
+            '#ff3355', // Red
+            '#33ccff', // Blue
+            '#33ff66', // Green
+            '#ffe600', // Yellow
+            '#cc33ff'  // Purple
+        ];
+
+        const SHAPES = [
+            [],
+            [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
+            [[2,2,0],[0,2,2],[0,0,0]],                // Z
+            [[0,3,3],[3,3,0],[0,0,0]],                // S
+            [[4,4],[4,4]],                            // O
+            [[0,0,5],[5,5,5],[0,0,0]],                // L
+            [[6,0,0],[6,6,6],[0,0,0]],                // J
+            [[0,7,0],[7,7,7],[0,0,0]]                 // T
+        ];
+
+        const AI_DIFFICULTIES = {
+            easy: { name: 'かんたん', dropInterval: 800, moveInterval: 200, errorRate: 0.25, garbagePerLine: 1 },
+            normal: { name: 'ふつう', dropInterval: 500, moveInterval: 120, errorRate: 0.10, garbagePerLine: 3 },
+            hard: { name: 'むずかしい', dropInterval: 300, moveInterval: 70, errorRate: 0.02, garbagePerLine: 5 }
+        };
+
+        let soundEnabled = true;
+
+        class SoundSynth {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+            }
+
+            playTone(freq, type = 'sine', duration = 0.1, vol = 0.1) {
+                if (!soundEnabled || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e){}
+            }
+
+            move() { this.playTone(300, 'square', 0.04, 0.05); }
+            rotate() { this.playTone(450, 'triangle', 0.06, 0.08); }
+            drop() { this.playTone(180, 'sawtooth', 0.1, 0.12); }
+            lineClear() {
+                this.playTone(523.25, 'square', 0.08, 0.1);
+                setTimeout(() => this.playTone(659.25, 'square', 0.1, 0.1), 60);
+                setTimeout(() => this.playTone(783.99, 'square', 0.15, 0.12), 120);
+            }
+            puyoPop(chain) {
+                const baseFreq = 400 + chain * 150;
+                this.playTone(baseFreq, 'sine', 0.15, 0.15);
+                setTimeout(() => this.playTone(baseFreq * 1.25, 'triangle', 0.15, 0.15), 80);
+            }
+            bombExplode() {
+                this.playTone(100, 'sawtooth', 0.3, 0.25);
+                setTimeout(() => this.playTone(60, 'square', 0.4, 0.3), 50);
+            }
+            levelUp() {
+                this.playTone(440, 'triangle', 0.1, 0.12);
+                setTimeout(() => this.playTone(587.33, 'triangle', 0.1, 0.12), 90);
+                setTimeout(() => this.playTone(880, 'square', 0.25, 0.15), 180);
+            }
+            attack() { this.playTone(120, 'sawtooth', 0.25, 0.15); }
+            achievement() {
+                this.playTone(523.25, 'triangle', 0.12, 0.15);
+                setTimeout(() => this.playTone(659.25, 'triangle', 0.12, 0.15), 100);
+                setTimeout(() => this.playTone(783.99, 'triangle', 0.12, 0.15), 200);
+                setTimeout(() => this.playTone(1046.50, 'square', 0.4, 0.2), 300);
+            }
+            win() {
+                this.playTone(440, 'triangle', 0.15, 0.15);
+                setTimeout(() => this.playTone(554.37, 'triangle', 0.15, 0.15), 150);
+                setTimeout(() => this.playTone(659.25, 'triangle', 0.3, 0.2), 300);
+            }
+            lose() {
+                this.playTone(300, 'sawtooth', 0.2, 0.15);
+                setTimeout(() => this.playTone(220, 'sawtooth', 0.2, 0.15), 200);
+                setTimeout(() => this.playTone(150, 'sawtooth', 0.4, 0.2), 400);
+            }
+        }
+
+        const audio = new SoundSynth();
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('sound-btn').innerText = soundEnabled ? '🔊 サウンド ON' : '🔇 サウンド OFF';
+        }
+
+        class ParticleSystem {
+            constructor() {
+                this.particles = [];
+            }
+
+            addExplosion(x, y, color, count = 12) {
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * 4 + 1;
+                    this.particles.push({
+                        x, y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        size: Math.random() * 5 + 2,
+                        color,
+                        life: 1.0
+                    });
+                }
+            }
+
+            updateAndDraw(ctx) {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= 0.03;
+
+                    if (p.life <= 0) {
+                        this.particles.splice(i, 1);
+                    } else {
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = p.life;
+                        ctx.fillRect(p.x, p.y, p.size, p.size);
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+            }
+        }
+
+        const particleSystem = new ParticleSystem();
+
+        function triggerScreenShake() {
+            const container = document.getElementById('game-main-container');
+            if (container) {
+                container.classList.remove('shake');
+                void container.offsetWidth;
+                container.classList.add('shake');
+            }
+        }
+
+        const QUESTS = [
+            { id: 'q1', title: 'ビギナー（Beginner）', scoreReq: 500, desc: '500点を達成する' },
+            { id: 'q2', title: '熟練者（Intermediate）', scoreReq: 1000, desc: '1,000点を達成する' },
+            { id: 'q3', title: 'エキスパート（Expert）', scoreReq: 2000, desc: '2,000点を達成する' },
+            { id: 'q4', title: '爆破専門家（Demolitionist）', scoreReq: 5000, desc: '5,000点を達成する' },
+            { id: 'q5', title: '伝説の神（Final Quest）', scoreReq: 10000, desc: '10,000点を達成する' }
+        ];
+
+        let unlockedAchievements = JSON.parse(localStorage.getItem('tetris_achievements') || '[]');
+
+        function saveAchievements() {
+            localStorage.setItem('tetris_achievements', JSON.stringify(unlockedAchievements));
+        }
+
+        function checkAchievements(currentScore) {
+            QUESTS.forEach(quest => {
+                if (!unlockedAchievements.includes(quest.id) && currentScore >= quest.scoreReq) {
+                    unlockedAchievements.push(quest.id);
+                    saveAchievements();
+                    triggerAchievementUnlock(quest);
+                }
+            });
+            updateHighestTitle();
+        }
+
+        function triggerAchievementUnlock(quest) {
+            audio.achievement();
+            const toast = document.getElementById('achievement-toast');
+            const titleEl = document.getElementById('toast-title');
+            if (toast && titleEl) {
+                titleEl.innerText = `${quest.title}`;
+                toast.classList.remove('toast-active');
+                void toast.offsetWidth;
+                toast.classList.add('toast-active');
+            }
+            renderQuestsList();
+        }
+
+        function getHighestTitle() {
+            let highest = 'ビギナー';
+            QUESTS.forEach(quest => {
+                if (unlockedAchievements.includes(quest.id)) {
+                    highest = quest.title.split(' ')[0];
+                }
+            });
+            return highest;
+        }
+
+        function updateHighestTitle() {
+            const displayEl = document.getElementById('player-title-display');
+            if (displayEl) {
+                displayEl.innerText = getHighestTitle();
+            }
+        }
+
+        function renderQuestsList() {
+            const container = document.getElementById('quests-list-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            QUESTS.forEach(quest => {
+                const isUnlocked = unlockedAchievements.includes(quest.id);
+                const item = document.createElement('div');
+                item.className = `p-2.5 rounded border flex justify-between items-center ${
+                    isUnlocked ? 'bg-yellow-950/40 border-yellow-500/60' : 'bg-black/40 border-gray-800'
+                }`;
+
+                item.innerHTML = `
+                    <div>
+                        <div class="font-bold ${isUnlocked ? 'text-yellow-300' : 'text-gray-400'}">
+                            ${isUnlocked ? '🏆 ' : '🔒 '}${quest.title}
+                        </div>
+                        <div class="text-[9px] text-gray-400 mt-0.5">${quest.desc}</div>
+                    </div>
+                    <div class="text-right">
+                        ${isUnlocked 
+                            ? '<span class="bg-yellow-500/20 text-yellow-300 text-[8px] font-bold px-2 py-0.5 rounded border border-yellow-400/50">達成済み！</span>' 
+                            : `<span class="text-gray-500 text-[8px] font-mono">${quest.scoreReq.toLocaleString()}pt</span>`
+                        }
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function toggleAchievementsModal(show) {
+            const modal = document.getElementById('achievements-modal');
+            if (show) {
+                renderQuestsList();
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function toggleHowToPlayModal(show) {
+            const modal = document.getElementById('howto-modal');
+            if (show) {
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function toggleLanModal(show) {
+            const modal = document.getElementById('lan-modal');
+            if (show) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+
+        function showFloatingText(text, containerId, colorClass = 'text-yellow-300') {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const el = document.createElement('div');
+            el.className = `floating-text ${colorClass} text-xs font-mono top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`;
+            el.innerText = text;
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 1200);
+        }
+
+        class TetrisBoard {
+            constructor(canvas, nextCanvas, isAI = false) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.nextCanvas = nextCanvas;
+                this.nextCtx = nextCanvas.getContext('2d');
+                this.isAI = isAI;
+                this.reset();
+            }
+
+            reset() {
+                this.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+                this.score = 0;
+                this.linesClearedTotal = 0;
+                this.level = 1;
+                this.combo = 0;
+                this.currentPiece = null;
+                this.nextPiece = this.getRandomPiece();
+                this.dropCounter = 0;
+                this.aiMoveCounter = 0;
+                this.aiTarget = null;
+                this.isGrounded = false;
+                this.lockTimer = 0;
+                this.lockDelay = 500;
+                this.spawnNextPiece();
+            }
+
+            getRandomPiece() {
+                const type = Math.floor(Math.random() * 7) + 1;
+                let shape = SHAPES[type].map(row => [...row]);
+
+                // In Bomb Tetris mode, randomly mark 1 block in the piece as a bomb block (value 9)
+                if (selectedMode === 'bomb_tetris' && Math.random() < 0.4) {
+                    let points = [];
+                    for (let r = 0; r < shape.length; r++) {
+                        for (let c = 0; c < shape[r].length; c++) {
+                            if (shape[r][c] !== 0) points.push({ r, c });
+                        }
+                    }
+                    if (points.length > 0) {
+                        const target = points[Math.floor(Math.random() * points.length)];
+                        shape[target.r][target.c] = 9; // 9 = Bomb block
+                    }
+                }
+
+                return {
+                    type,
+                    shape,
+                    x: Math.floor((COLS - shape[0].length) / 2),
+                    y: 0
+                };
+            }
+
+            spawnNextPiece() {
+                this.currentPiece = this.nextPiece;
+                this.nextPiece = this.getRandomPiece();
+                this.aiTarget = null;
+                this.isGrounded = false;
+                this.lockTimer = 0;
+
+                if (selectedMode === 'master_20g') {
+                    // Instant drop in 20G Mode
+                    while (!this.checkCollision(this.currentPiece.shape, this.currentPiece.x, this.currentPiece.y + 1)) {
+                        this.currentPiece.y++;
+                    }
+                }
+
+                if (this.checkCollision(this.currentPiece.shape, this.currentPiece.x, this.currentPiece.y)) {
+                    return false;
+                }
+                this.drawNextPiece();
+                return true;
+            }
+
+            checkCollision(shape, offsetX, offsetY) {
+                for (let r = 0; r < shape.length; r++) {
+                    for (let c = 0; c < shape[r].length; c++) {
+                        if (shape[r][c] !== 0) {
+                            const newX = offsetX + c;
+                            const newY = offsetY + r;
+                            if (newX < 0 || newX >= COLS || newY >= ROWS) return true;
+                            if (newY >= 0 && this.grid[newY][newX] !== 0) return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            moveLeft() {
+                if (!this.currentPiece) return;
+                if (!this.checkCollision(this.currentPiece.shape, this.currentPiece.x - 1, this.currentPiece.y)) {
+                    this.currentPiece.x--;
+                    if (this.isGrounded) this.lockTimer = 0;
+                    this.dropCounter = 0;
+                    if (!this.isAI) audio.move();
+                }
+            }
+
+            moveRight() {
+                if (!this.currentPiece) return;
+                if (!this.checkCollision(this.currentPiece.shape, this.currentPiece.x + 1, this.currentPiece.y)) {
+                    this.currentPiece.x++;
+                    if (this.isGrounded) this.lockTimer = 0;
+                    this.dropCounter = 0;
+                    if (!this.isAI) audio.move();
+                }
+            }
+
+            rotate() {
+                if (!this.currentPiece) return;
+                const shape = this.currentPiece.shape;
+                const N = shape.length;
+                const rotated = Array.from({ length: N }, () => Array(N).fill(0));
+                for (let r = 0; r < N; r++) {
+                    for (let c = 0; c < N; c++) {
+                        rotated[c][N - 1 - r] = shape[r][c];
+                    }
+                }
+
+                const kicks = [
+                    [0, 0], [-1, 0], [1, 0], [0, -1], [-1, -1], [1, -1],
+                    [0, 1], [-1, 1], [1, 1], [-2, 0], [2, 0], [0, -2]
+                ];
+
+                for (let [kickX, kickY] of kicks) {
+                    if (!this.checkCollision(rotated, this.currentPiece.x + kickX, this.currentPiece.y + kickY)) {
+                        this.currentPiece.shape = rotated;
+                        this.currentPiece.x += kickX;
+                        this.currentPiece.y += kickY;
+                        if (this.isGrounded) this.lockTimer = 0;
+                        this.dropCounter = 0;
+                        if (!this.isAI) audio.rotate();
+                        return;
+                    }
+                }
+            }
+
+            checkGrounded() {
+                if (!this.currentPiece) return false;
+                return this.checkCollision(this.currentPiece.shape, this.currentPiece.x, this.currentPiece.y + 1);
+            }
+
+            drop(opponent = null) {
+                if (!this.currentPiece) return 'OK';
+                this.dropCounter = 0;
+                if (!this.checkCollision(this.currentPiece.shape, this.currentPiece.x, this.currentPiece.y + 1)) {
+                    this.currentPiece.y++;
+                    this.isGrounded = false;
+                    this.lockTimer = 0;
+                    return 'OK';
+                } else {
+                    this.isGrounded = true;
+                    return 'GROUNDED';
+                }
+            }
+
+            hardDrop(opponent = null) {
+                if (!this.currentPiece) return 'OK';
+                while (!this.checkCollision(this.currentPiece.shape, this.currentPiece.x, this.currentPiece.y + 1)) {
+                    this.currentPiece.y++;
+                }
+                if (!this.isAI) audio.drop();
+                triggerScreenShake();
+                return this.lockPiece(opponent);
+            }
+
+            lockPiece(opponent = null) {
+                this.mergePiece();
+                let bombDetonated = false;
+
+                // Check and trigger bomb explosion if in bomb_tetris mode
+                if (selectedMode === 'bomb_tetris') {
+                    bombDetonated = this.checkAndTriggerBombs();
+                }
+
+                const linesCleared = this.clearLines();
+
+                if (linesCleared > 0 || bombDetonated) {
+                    this.linesClearedTotal += linesCleared;
+                    this.combo++;
+                    const isCombo = this.combo > 1;
+                    const addedScore = (isCombo ? (150 * linesCleared * this.combo) : (100 * linesCleared)) + (bombDetonated ? 500 : 0);
+                    this.score += addedScore;
+
+                    if (selectedMode === 'marathon') {
+                        const newLevel = Math.floor(this.linesClearedTotal / 10) + 1;
+                        if (newLevel > this.level) {
+                            this.level = newLevel;
+                            if (!this.isAI) audio.levelUp();
+                            showFloatingText(`LEVEL UP! LVL ${this.level}`, 'player-container', 'text-green-400');
+                        }
+                    }
+
+                    if (!this.isAI) {
+                        if (bombDetonated) audio.bombExplode();
+                        else audio.lineClear();
+                        checkAchievements(this.score);
+                    }
+
+                    showFloatingText(
+                        bombDetonated ? `💣 BOMB EXPLOSION! +${addedScore}` : (isCombo ? `COMBO x${this.combo}! +${addedScore}` : `CLEAR! +${addedScore}`),
+                        this.isAI ? 'ai-container' : 'player-container',
+                        bombDetonated ? 'text-red-400 font-extrabold' : (isCombo ? 'text-yellow-300' : 'text-cyan-300')
+                    );
+
+                    // Send garbage in VS Modes (including Tetris vs Puyo AI!)
+                    if ((selectedMode === 'vs_ai' || selectedMode === 'vs_puyo_ai' || selectedMode === 'local_2p' || selectedMode === 'lan_multi') && opponent) {
+                        const garbageAmount = linesCleared * (currentAiDiff ? currentAiDiff.garbagePerLine : 2);
+                        if (typeof opponent.receiveGarbage === 'function') opponent.receiveGarbage(garbageAmount);
+                        if (selectedMode === 'lan_multi') {
+                            if (networkConn && networkConn.open) {
+                                try { networkConn.send({ type: 'ATTACK', count: garbageAmount }); } catch(e){}
+                            }
+                            if (localChannel) {
+                                try { localChannel.postMessage({ type: 'ATTACK', count: garbageAmount }); } catch(e){}
+                            }
+                        }
+                        if (!this.isAI) audio.attack();
+                    }
+                } else {
+                    this.combo = 0;
+                }
+
+                if (!this.spawnNextPiece()) {
+                    return 'GAMEOVER';
+                }
+                return 'OK';
+            }
+
+            checkAndTriggerBombs() {
+                let detonated = false;
+                const bombPositions = [];
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (this.grid[r][c] === 9) { // 9 is Bomb
+                            bombPositions.push({ r, c });
+                        }
+                    }
+                }
+
+                if (bombPositions.length > 0) {
+                    detonated = true;
+                    triggerScreenShake();
+                    bombPositions.forEach(({ r, c }) => {
+                        // Explode 3x3 surrounding cells
+                        for (let dr = -1; dr <= 1; dr++) {
+                            for (let dc = -1; dc <= 1; dc++) {
+                                const nr = r + dr;
+                                const nc = c + dc;
+                                if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+                                    if (this.grid[nr][nc] !== 0) {
+                                        particleSystem.addExplosion(
+                                            (nc + 0.5) * BLOCK_SIZE,
+                                            (nr + 0.5) * BLOCK_SIZE,
+                                            COLORS[this.grid[nr][nc]] || '#ff2222',
+                                            15
+                                        );
+                                        this.grid[nr][nc] = 0;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+                return detonated;
+            }
+
+            mergePiece() {
+                const { shape, x, y } = this.currentPiece;
+                for (let r = 0; r < shape.length; r++) {
+                    for (let c = 0; c < shape[r].length; c++) {
+                        if (shape[r][c] !== 0) {
+                            if (y + r >= 0 && y + r < ROWS && x + c >= 0 && x + c < COLS) {
+                                this.grid[y + r][x + c] = shape[r][c];
+                            }
+                        }
+                    }
+                }
+            }
+
+            clearLines() {
+                let cleared = 0;
+                for (let r = ROWS - 1; r >= 0; r--) {
+                    if (this.grid[r].every(cell => cell !== 0)) {
+                        for (let c = 0; c < COLS; c++) {
+                            particleSystem.addExplosion(
+                                (c + 0.5) * BLOCK_SIZE,
+                                (r + 0.5) * BLOCK_SIZE,
+                                COLORS[this.grid[r][c]] || '#fff'
+                            );
+                        }
+                        this.grid.splice(r, 1);
+                        this.grid.unshift(Array(COLS).fill(0));
+                        cleared++;
+                        r++;
+                    }
+                }
+                return cleared;
+            }
+
+            receiveGarbage(count) {
+                if (count <= 0) return;
+                for (let i = 0; i < count; i++) {
+                    this.grid.shift();
+                    const garbageRow = Array(COLS).fill(8);
+                    const hole = Math.floor(Math.random() * COLS);
+                    garbageRow[hole] = 0;
+                    this.grid.push(garbageRow);
+                }
+            }
+
+            getGhostY() {
+                if (!this.currentPiece) return 0;
+                let ghostY = this.currentPiece.y;
+                while (!this.checkCollision(this.currentPiece.shape, this.currentPiece.x, ghostY + 1)) {
+                    ghostY++;
+                }
+                return ghostY;
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                this.ctx.strokeStyle = '#151528';
+                this.ctx.lineWidth = 1;
+                for (let r = 0; r <= ROWS; r++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, r * BLOCK_SIZE);
+                    this.ctx.lineTo(COLS * BLOCK_SIZE, r * BLOCK_SIZE);
+                    this.ctx.stroke();
+                }
+                for (let c = 0; c <= COLS; c++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(c * BLOCK_SIZE, 0);
+                    this.ctx.lineTo(c * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+                    this.ctx.stroke();
+                }
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (this.grid[r][c] !== 0) {
+                            this.drawBlock(this.ctx, c, r, COLORS[this.grid[r][c]], this.grid[r][c] === 9);
+                        }
+                    }
+                }
+
+                if (this.currentPiece) {
+                    const ghostY = this.getGhostY();
+                    const shape = this.currentPiece.shape;
+                    const px = this.currentPiece.x;
+                    const py = this.currentPiece.y;
+
+                    for (let r = 0; r < shape.length; r++) {
+                        for (let c = 0; c < shape[r].length; c++) {
+                            if (shape[r][c] !== 0) {
+                                this.drawGhostBlock(this.ctx, px + c, ghostY + r, COLORS[shape[r][c]]);
+                            }
+                        }
+                    }
+
+                    for (let r = 0; r < shape.length; r++) {
+                        for (let c = 0; c < shape[r].length; c++) {
+                            if (shape[r][c] !== 0) {
+                                this.drawBlock(this.ctx, px + c, py + r, COLORS[shape[r][c]], shape[r][c] === 9);
+                            }
+                        }
+                    }
+                }
+
+                particleSystem.updateAndDraw(this.ctx);
+            }
+
+            drawNextPiece() {
+                this.nextCtx.clearRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
+                if (!this.nextPiece) return;
+                const shape = this.nextPiece.shape;
+                const size = 10;
+                const offsetX = (50 - shape[0].length * size) / 2;
+                const offsetY = (50 - shape.length * size) / 2;
+
+                for (let r = 0; r < shape.length; r++) {
+                    for (let c = 0; c < shape[r].length; c++) {
+                        if (shape[r][c] !== 0) {
+                            this.nextCtx.fillStyle = COLORS[shape[r][c]];
+                            this.nextCtx.fillRect(offsetX + c * size, offsetY + r * size, size - 1, size - 1);
+                        }
+                    }
+                }
+            }
+
+            drawBlock(ctx, x, y, color, isBomb = false) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                ctx.fillStyle = 'rgba(255,255,255,0.25)';
+                ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE - 1, 2);
+                ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, 2, BLOCK_SIZE - 1);
+
+                if (isBomb) {
+                    ctx.fillStyle = '#ffff00';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('💣', (x + 0.5) * BLOCK_SIZE, (y + 0.75) * BLOCK_SIZE);
+                }
+            }
+
+            drawGhostBlock(ctx, x, y, color) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x * BLOCK_SIZE + 1, y * BLOCK_SIZE + 1, BLOCK_SIZE - 3, BLOCK_SIZE - 3);
+                ctx.fillStyle = color + '22';
+                ctx.fillRect(x * BLOCK_SIZE + 1, y * BLOCK_SIZE + 1, BLOCK_SIZE - 3, BLOCK_SIZE - 3);
+            }
+        }
+
+        class PuyoBoard {
+            constructor(canvas, nextCanvas, isAI = false) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.nextCanvas = nextCanvas;
+                this.nextCtx = nextCanvas.getContext('2d');
+                this.isAI = isAI;
+                this.reset();
+            }
+
+            reset() {
+                this.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+                this.score = 0;
+                this.chain = 0;
+                this.currentPair = null;
+                this.nextPair = this.getRandomPair();
+                this.dropCounter = 0;
+                this.aiTimer = 0;
+                this.spawnNextPair();
+            }
+
+            getRandomPair() {
+                return {
+                    p1: Math.floor(Math.random() * 5) + 1,
+                    p2: Math.floor(Math.random() * 5) + 1
+                };
+            }
+
+            spawnNextPair() {
+                const pair = this.nextPair;
+                this.nextPair = this.getRandomPair();
+                this.currentPair = {
+                    p1: pair.p1,
+                    p2: pair.p2,
+                    x: Math.floor(COLS / 2) - 1,
+                    y: 1,
+                    rot: 0
+                };
+                if (this.grid[1][this.currentPair.x] !== 0) return false;
+                this.drawNextPair();
+                return true;
+            }
+
+            getRotPos(x, y, rot) {
+                let p2x = x, p2y = y;
+                if (rot === 0) p2y = y - 1;
+                else if (rot === 1) p2x = x + 1;
+                else if (rot === 2) p2y = y + 1;
+                else if (rot === 3) p2x = x - 1;
+                return { p1x: x, p1y: y, p2x, p2y };
+            }
+
+            checkCollision(x, y, rot) {
+                const { p1x, p1y, p2x, p2y } = this.getRotPos(x, y, rot);
+                if (p1x < 0 || p1x >= COLS || p1y >= ROWS || (p1y >= 0 && this.grid[p1y][p1x] !== 0)) return true;
+                if (p2x < 0 || p2x >= COLS || p2y >= ROWS || (p2y >= 0 && this.grid[p2y][p2x] !== 0)) return true;
+                return false;
+            }
+
+            moveLeft() {
+                if (!this.currentPair) return;
+                if (!this.checkCollision(this.currentPair.x - 1, this.currentPair.y, this.currentPair.rot)) {
+                    this.currentPair.x--;
+                    if (!this.isAI) audio.move();
+                }
+            }
+
+            moveRight() {
+                if (!this.currentPair) return;
+                if (!this.checkCollision(this.currentPair.x + 1, this.currentPair.y, this.currentPair.rot)) {
+                    this.currentPair.x++;
+                    if (!this.isAI) audio.move();
+                }
+            }
+
+            rotate() {
+                if (!this.currentPair) return;
+                const nextRot = (this.currentPair.rot + 1) % 4;
+                if (!this.checkCollision(this.currentPair.x, this.currentPair.y, nextRot)) {
+                    this.currentPair.rot = nextRot;
+                    if (!this.isAI) audio.rotate();
+                }
+            }
+
+            drop(opponent = null) {
+                if (!this.currentPair) return;
+                if (!this.checkCollision(this.currentPair.x, this.currentPair.y + 1, this.currentPair.rot)) {
+                    this.currentPair.y++;
+                } else {
+                    this.lockPuyo(opponent);
+                }
+            }
+
+            hardDrop(opponent = null) {
+                if (!this.currentPair) return;
+                while (!this.checkCollision(this.currentPair.x, this.currentPair.y + 1, this.currentPair.rot)) {
+                    this.currentPair.y++;
+                }
+                if (!this.isAI) audio.drop();
+                this.lockPuyo(opponent);
+            }
+
+            async lockPuyo(opponent = null) {
+                const { p1x, p1y, p2x, p2y } = this.getRotPos(this.currentPair.x, this.currentPair.y, this.currentPair.rot);
+                if (p1y >= 0) this.grid[p1y][p1x] = this.currentPair.p1;
+                if (p2y >= 0) this.grid[p2y][p2x] = this.currentPair.p2;
+                this.currentPair = null;
+
+                this.applyGravity();
+                this.chain = 0;
+                await this.processChains(opponent);
+
+                if (!this.spawnNextPair()) {
+                    triggerGameOver(this.isAI ? 'PLAYER' : 'LOSE');
+                }
+            }
+
+            applyGravity() {
+                for (let c = 0; c < COLS; c++) {
+                    for (let r = ROWS - 1; r >= 0; r--) {
+                        if (this.grid[r][c] === 0) {
+                            for (let k = r - 1; k >= 0; k--) {
+                                if (this.grid[k][c] !== 0) {
+                                    this.grid[r][c] = this.grid[k][c];
+                                    this.grid[k][c] = 0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            async processChains(opponent = null) {
+                let popped = false;
+                const visited = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (this.grid[r][c] !== 0 && !visited[r][c]) {
+                            const group = [];
+                            const color = this.grid[r][c];
+                            const queue = [[r, c]];
+                            visited[r][c] = true;
+
+                            while (queue.length > 0) {
+                                const [currR, currC] = queue.shift();
+                                group.push([currR, currC]);
+
+                                const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                                for (let [dr, dc] of dirs) {
+                                    const nr = currR + dr;
+                                    const nc = currC + dc;
+                                    if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+                                        if (!visited[nr][nc] && this.grid[nr][nc] === color) {
+                                            visited[nr][nc] = true;
+                                            queue.push([nr, nc]);
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (group.length >= 4) {
+                                popped = true;
+                                group.forEach(([gr, gc]) => {
+                                    particleSystem.addExplosion((gc + 0.5) * BLOCK_SIZE, (gr + 0.5) * BLOCK_SIZE, PUYO_COLORS[color]);
+                                    this.grid[gr][gc] = 0;
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if (popped) {
+                    this.chain++;
+                    const addedScore = this.chain * 400;
+                    this.score += addedScore;
+                    if (!this.isAI) audio.puyoPop(this.chain);
+                    showFloatingText(`${this.chain}연쇄! +${addedScore}`, this.isAI ? 'ai-container' : 'player-container', 'text-purple-300');
+
+                    // Attack Opponent (Send Garbage)
+                    if (opponent && typeof opponent.receiveGarbage === 'function') {
+                        opponent.receiveGarbage(this.chain * 2);
+                    }
+
+                    this.applyGravity();
+                    this.draw();
+                    await new Promise(r => setTimeout(r, 220));
+                    await this.processChains(opponent);
+                }
+            }
+
+            receiveGarbage(count) {
+                if (count <= 0) return;
+                for (let i = 0; i < count; i++) {
+                    const holeCol = Math.floor(Math.random() * COLS);
+                    if (this.grid[0][holeCol] === 0) {
+                        this.grid[0][holeCol] = Math.floor(Math.random() * 5) + 1;
+                    }
+                }
+                this.applyGravity();
+            }
+
+            // Simple Puyo AI Step Logic
+            stepAI(opponent) {
+                if (!this.currentPair) return;
+                const targetCol = Math.floor(Math.random() * COLS);
+                if (this.currentPair.x < targetCol) this.moveRight();
+                else if (this.currentPair.x > targetCol) this.moveLeft();
+                else this.drop(opponent);
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (this.grid[r][c] !== 0) {
+                            this.drawPuyo(this.ctx, c, r, PUYO_COLORS[this.grid[r][c]]);
+                        }
+                    }
+                }
+
+                if (this.currentPair) {
+                    const { p1x, p1y, p2x, p2y } = this.getRotPos(this.currentPair.x, this.currentPair.y, this.currentPair.rot);
+                    if (p1y >= 0) this.drawPuyo(this.ctx, p1x, p1y, PUYO_COLORS[this.currentPair.p1]);
+                    if (p2y >= 0) this.drawPuyo(this.ctx, p2x, p2y, PUYO_COLORS[this.currentPair.p2]);
+                }
+
+                particleSystem.updateAndDraw(this.ctx);
+            }
+
+            drawNextPair() {
+                this.nextCtx.clearRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
+                if (!this.nextPair) return;
+                this.drawPuyoRaw(this.nextCtx, 25, 15, 8, PUYO_COLORS[this.nextPair.p2]);
+                this.drawPuyoRaw(this.nextCtx, 25, 35, 8, PUYO_COLORS[this.nextPair.p1]);
+            }
+
+            drawPuyo(ctx, x, y, color) {
+                const cx = (x + 0.5) * BLOCK_SIZE;
+                const cy = (y + 0.5) * BLOCK_SIZE;
+                this.drawPuyoRaw(ctx, cx, cy, BLOCK_SIZE / 2 - 1, color);
+            }
+
+            drawPuyoRaw(ctx, cx, cy, r, color) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(cx - r / 3, cy - r / 3, r / 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+            }
+        }
+
+        class TetrisAI {
+            static getBestMove(board, errorRate = 0.1) {
+                if (!board.currentPiece) return null;
+
+                const piece = board.currentPiece;
+                const moves = [];
+
+                let shape = piece.shape.map(r => [...r]);
+                for (let rot = 0; rot < 4; rot++) {
+                    const N = shape.length;
+                    let minC = N, maxC = -1;
+                    for (let r = 0; r < N; r++) {
+                        for (let c = 0; c < N; c++) {
+                            if (shape[r][c] !== 0) {
+                                minC = Math.min(minC, c);
+                                maxC = Math.max(maxC, c);
+                            }
+                        }
+                    }
+                    if (maxC === -1) break;
+
+                    for (let x = -minC; x <= COLS - 1 - maxC; x++) {
+                        if (board.checkCollision(shape, x, piece.y)) continue;
+
+                        let dropY = piece.y;
+                        while (!board.checkCollision(shape, x, dropY + 1)) {
+                            dropY++;
+                        }
+
+                        const score = TetrisAI.evaluateBoard(board.grid, shape, x, dropY);
+                        moves.push({ x, rot, score });
+                    }
+
+                    const rotated = Array.from({ length: N }, () => Array(N).fill(0));
+                    for (let r = 0; r < N; r++) {
+                        for (let c = 0; c < N; c++) {
+                            rotated[c][N - 1 - r] = shape[r][c];
+                        }
+                    }
+                    shape = rotated;
+                }
+
+                if (moves.length === 0) return { x: piece.x, rot: 0 };
+
+                moves.sort((a, b) => b.score - a.score);
+
+                if (Math.random() < errorRate && moves.length > 1) {
+                    const randomIndex = Math.floor(Math.random() * Math.min(moves.length, 3));
+                    return moves[randomIndex];
+                }
+
+                return moves[0];
+            }
+
+            static evaluateBoard(grid, shape, pieceX, pieceY) {
+                const tempGrid = grid.map(r => [...r]);
+                for (let r = 0; r < shape.length; r++) {
+                    for (let c = 0; c < shape[r].length; c++) {
+                        if (shape[r][c] !== 0) {
+                            if (pieceY + r >= 0 && pieceY + r < ROWS && pieceX + c >= 0 && pieceX + c < COLS) {
+                                tempGrid[pieceY + r][pieceX + c] = 1;
+                            }
+                        }
+                    }
+                }
+
+                let linesCleared = 0;
+                for (let r = 0; r < ROWS; r++) {
+                    if (tempGrid[r].every(cell => cell !== 0)) linesCleared++;
+                }
+
+                const heights = [];
+                for (let c = 0; c < COLS; c++) {
+                    let h = 0;
+                    for (let r = 0; r < ROWS; r++) {
+                        if (tempGrid[r][c] !== 0) {
+                            h = ROWS - r;
+                            break;
+                        }
+                    }
+                    heights.push(h);
+                }
+
+                const aggregateHeight = heights.reduce((a, b) => a + b, 0);
+
+                let holes = 0;
+                for (let c = 0; c < COLS; c++) {
+                    let blockFound = false;
+                    for (let r = 0; r < ROWS; r++) {
+                        if (tempGrid[r][c] !== 0) {
+                            blockFound = true;
+                        } else if (blockFound && tempGrid[r][c] === 0) {
+                            holes++;
+                        }
+                    }
+                }
+
+                let bumpiness = 0;
+                for (let c = 0; c < COLS - 1; c++) {
+                    bumpiness += Math.abs(heights[c] - heights[c + 1]);
+                }
+
+                return (linesCleared * 0.76) - (aggregateHeight * 0.51) - (holes * 0.36) - (bumpiness * 0.18);
+            }
+        }
+
+        let peer = null;
+        let networkConn = null;
+        let localChannel = null;
+
+        function initPeerJS() {
+            if (!peer) {
+                try {
+                    peer = new Peer();
+                    peer.on('connection', (conn) => {
+                        networkConn = conn;
+                        setupNetworkEvents();
+                        document.getElementById('lan-status-text').innerText = "상대방 접속 완료! 게임을 시작하세요.";
+                    });
+                    peer.on('error', (err) => {
+                        document.getElementById('lan-status-text').innerText = "⚠️ 외부 연결 제한 (로컬 채널 모드로 대기 중).";
+                    });
+                } catch(e) {
+                    document.getElementById('lan-status-text').innerText = "⚠️ 보안 정책으로 외부 연결이 차단되었습니다.";
+                }
+            }
+        }
+
+        function hostLanGame() {
+            const code = Math.floor(1000 + Math.random() * 9000).toString();
+            document.getElementById('my-room-code').innerText = code;
+            document.getElementById('lan-status-text').innerText = "待機中… 친구에게 룸 코드를 전달하세요.";
+
+            if (localChannel) try { localChannel.close(); } catch(e){}
+            try {
+                localChannel = new BroadcastChannel('tetris-room-' + code);
+                localChannel.onmessage = (event) => {
+                    const data = event.data;
+                    if (data.type === 'JOIN_REQ') {
+                        localChannel.postMessage({ type: 'JOIN_ACK' });
+                        document.getElementById('lan-status-text').innerText = "상대방 접속 완료! 게임을 시작합니다.";
+                        setTimeout(() => {
+                            toggleLanModal(false);
+                            startSelectedGame();
+                        }, 600);
+                    } else if (data.type === 'ATTACK') {
+                        aiBoard.receiveGarbage(data.count);
+                    } else if (data.type === 'GAMEOVER') {
+                        triggerGameOver('PLAYER');
+                    }
+                };
+            } catch(e) {}
+        }
+
+        function joinLanGame() {
+            const input = document.getElementById('join-room-input').value.trim();
+            if (!input) return;
+            document.getElementById('lan-status-text').innerText = "연결 시도 중...";
+
+            if (localChannel) try { localChannel.close(); } catch(e){}
+            try {
+                localChannel = new BroadcastChannel('tetris-room-' + input);
+                localChannel.onmessage = (event) => {
+                    const data = event.data;
+                    if (data.type === 'JOIN_ACK') {
+                        document.getElementById('lan-status-text').innerText = "연결 성공! 게임을 시작합니다.";
+                        setTimeout(() => {
+                            toggleLanModal(false);
+                            startSelectedGame();
+                        }, 600);
+                    } else if (data.type === 'ATTACK') {
+                        aiBoard.receiveGarbage(data.count);
+                    } else if (data.type === 'GAMEOVER') {
+                        triggerGameOver('PLAYER');
+                    }
+                };
+                localChannel.postMessage({ type: 'JOIN_REQ' });
+            } catch(e) {}
+        }
+
+        function setupNetworkEvents() {
+            if (!networkConn) return;
+            networkConn.on('open', () => {
+                document.getElementById('lan-status-text').innerText = "연결 완료! 게임 시작 가능.";
+                toggleLanModal(false);
+                startSelectedGame();
+            });
+            networkConn.on('data', (data) => {
+                if (data.type === 'ATTACK') {
+                    aiBoard.receiveGarbage(data.count);
+                } else if (data.type === 'GAMEOVER') {
+                    triggerGameOver('PLAYER');
+                }
+            });
+        }
+
+        // IMPORTANT: These state variables must be initialized BEFORE
+        // constructing the board objects. TetrisBoard.reset() -> getRandomPiece()
+        // reads selectedMode, so declaring it afterwards causes a TDZ
+        // ReferenceError and stops the entire script from initializing.
+        let gameState = 'START';
+        let selectedMode = 'vs_ai'; // Modes: 'vs_ai', 'vs_puyo_ai', 'local_2p', 'lan_multi', 'bomb_tetris', 'garbage_survival', 'master_20g', 'puyo', 'sprint', 'marathon'
+        let currentAiDiff = AI_DIFFICULTIES.normal;
+
+        let playerBoard = new TetrisBoard(
+            document.getElementById('player-canvas'),
+            document.getElementById('player-next-canvas'),
+            false
+        );
+
+        let aiBoard = new TetrisBoard(
+            document.getElementById('ai-canvas'),
+            document.getElementById('ai-next-canvas'),
+            true
+        );
+
+        let puyoBoard = new PuyoBoard(
+            document.getElementById('player-canvas'),
+            document.getElementById('player-next-canvas')
+        );
+
+        let puyoAiBoard = new PuyoBoard(
+            document.getElementById('ai-canvas'),
+            document.getElementById('ai-next-canvas'),
+            true
+        );
+        
+        let startTime = 0;
+        let elapsedTime = 0;
+        let lastTime = 0;
+        let garbageTimer = 0;
+        let animationFrameId = null;
+
+        function loadRecords() {
+            const sprintBest = localStorage.getItem('tetris_best_sprint');
+            const marathonBest = localStorage.getItem('tetris_best_marathon') || 0;
+            const puyoBest = localStorage.getItem('puyo_best_score') || 0;
+
+            document.getElementById('best-sprint-time').innerText = sprintBest ? formatTimer(parseFloat(sprintBest)) : '--:--.-';
+            document.getElementById('best-marathon-score').innerText = `${parseInt(marathonBest).toLocaleString()} pt`;
+            document.getElementById('best-puyo-score').innerText = `${parseInt(puyoBest).toLocaleString()} pt`;
+        }
+
+        function formatTimer(ms) {
+            const totalSec = ms / 1000;
+            const mins = Math.floor(totalSec / 60);
+            const secs = Math.floor(totalSec % 60);
+            const tenths = Math.floor((ms % 1000) / 100);
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${tenths}`;
+        }
+
+        function selectMode(mode) {
+            selectedMode = mode;
+            const modesList = ['vs_ai', 'vs_puyo_ai', 'local_2p', 'lan_multi', 'bomb_tetris', 'garbage_survival', 'master_20g', 'puyo', 'sprint', 'marathon'];
+            modesList.forEach(m => {
+                const card = document.getElementById(`mode-card-${m}`);
+                if (card) {
+                    if (m === mode) card.classList.add('selected');
+                    else card.classList.remove('selected');
+                }
+            });
+
+            if (mode === 'lan_multi') {
+                toggleLanModal(true);
+            }
+        }
+
+        function setAiDiff(diffKey, e) {
+            e.stopPropagation();
+            currentAiDiff = AI_DIFFICULTIES[diffKey];
+            ['easy', 'normal', 'hard'].forEach(d => {
+                const btn = document.getElementById(`diff-${d}`);
+                if (btn) {
+                    if (d === diffKey) {
+                        btn.classList.add('border-yellow-400');
+                        btn.classList.remove('opacity-50');
+                    } else {
+                        btn.classList.remove('border-yellow-400');
+                        btn.classList.add('opacity-50');
+                    }
+                }
+            });
+        }
+
+        function startSelectedGame() {
+            audio.init();
+
+            playerBoard.reset();
+            aiBoard.reset();
+            puyoBoard.reset();
+            puyoAiBoard.reset();
+            garbageTimer = 0;
+
+            const aiContainer = document.getElementById('ai-container');
+            const vsDivider = document.getElementById('vs-divider');
+            const soloPanel = document.getElementById('solo-info-panel');
+            const playerContainer = document.getElementById('player-container');
+
+            if (selectedMode === 'vs_ai' || selectedMode === 'vs_puyo_ai' || selectedMode === 'local_2p' || selectedMode === 'lan_multi') {
+                aiContainer.classList.remove('hidden');
+                vsDivider.classList.remove('hidden');
+                soloPanel.classList.add('hidden');
+                playerContainer.className = "relative flex flex-col items-center bg-gray-950/80 p-3 rounded-xl border-glow-cyan";
+
+                if (selectedMode === 'vs_ai') {
+                    document.getElementById('header-mode-text').innerText = `1v1 VS AI (${currentAiDiff.name})`;
+                    document.getElementById('ai-label-text').innerText = "AI 対戦相手";
+                } else if (selectedMode === 'vs_puyo_ai') {
+                    document.getElementById('header-mode-text').innerText = "⚔️ テトリス VS ぷよAI 크로스";
+                    document.getElementById('ai-label-text').innerText = "PUYO AI";
+                } else if (selectedMode === 'local_2p') {
+                    document.getElementById('header-mode-text').innerText = "2P LOCAL BATTLE";
+                    document.getElementById('ai-label-text').innerText = "PLAYER 2";
+                } else if (selectedMode === 'lan_multi') {
+                    document.getElementById('header-mode-text').innerText = "1v1 LAN MULTI";
+                    document.getElementById('ai-label-text').innerText = "REMOTE P2";
+                }
+            } else {
+                aiContainer.classList.add('hidden');
+                vsDivider.classList.add('hidden');
+                soloPanel.classList.remove('hidden');
+                playerContainer.className = "relative flex flex-col items-center bg-gray-950/80 p-4 rounded-xl border-glow-cyan shadow-2xl";
+
+                if (selectedMode === 'puyo') {
+                    document.getElementById('header-mode-text').innerText = "PUYO PUYO MODE";
+                    document.getElementById('info-label-1').innerText = "CHAIN";
+                    document.getElementById('info-val-1').innerText = "0연쇄";
+                    document.getElementById('info-label-2').innerText = "SCORE";
+                    document.getElementById('info-val-2').innerText = "0";
+                } else if (selectedMode === 'bomb_tetris') {
+                    document.getElementById('header-mode-text').innerText = "💣 BOMB TETRIS MODE";
+                    document.getElementById('info-label-1').innerText = "SCORE";
+                    document.getElementById('info-label-2').innerText = "BOMBS";
+                    document.getElementById('info-val-2').innerText = "ACTIVE";
+                } else if (selectedMode === 'garbage_survival') {
+                    document.getElementById('header-mode-text').innerText = "🌋 GARBAGE SURVIVAL";
+                    document.getElementById('info-label-1').innerText = "TIME";
+                    document.getElementById('info-label-2').innerText = "RISING IN";
+                    document.getElementById('info-val-2').innerText = "4.0s";
+                } else if (selectedMode === 'master_20g') {
+                    document.getElementById('header-mode-text').innerText = "⚡ 20G MASTER ULTRA SPEED";
+                    document.getElementById('info-label-1').innerText = "SPEED";
+                    document.getElementById('info-val-1').innerText = "20G MAX";
+                    document.getElementById('info-label-2').innerText = "LINES";
+                    document.getElementById('info-val-2').innerText = "0";
+                } else if (selectedMode === 'sprint') {
+                    document.getElementById('header-mode-text').innerText = "40-LINE SPRINT";
+                    document.getElementById('info-label-1').innerText = "TIME";
+                    document.getElementById('info-label-2').innerText = "GOAL";
+                    document.getElementById('info-val-2').innerText = "0/40";
+                } else if (selectedMode === 'marathon') {
+                    document.getElementById('header-mode-text').innerText = "ENDLESS MARATHON";
+                    document.getElementById('info-label-1').innerText = "LEVEL";
+                    document.getElementById('info-val-1').innerText = "LVL 1";
+                    document.getElementById('info-label-2').innerText = "LINES";
+                    document.getElementById('info-val-2').innerText = "0";
+                }
+            }
+
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('howto-modal').classList.add('hidden');
+            document.getElementById('achievements-modal').classList.add('hidden');
+
+            gameState = 'PLAYING';
+            startTime = performance.now();
+            lastTime = startTime;
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameLoop(startTime);
+        }
+
+        function returnToMenu() {
+            gameState = 'START';
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+            loadRecords();
+            playerBoard.draw();
+            aiBoard.draw();
+        }
+
+        function triggerGameOver(winner) {
+            gameState = 'OVER';
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+            if (selectedMode === 'lan_multi') {
+                if (networkConn && networkConn.open) {
+                    try { networkConn.send({ type: 'GAMEOVER' }); } catch(e){}
+                }
+                if (localChannel) {
+                    try { localChannel.postMessage({ type: 'GAMEOVER' }); } catch(e){}
+                }
+            }
+
+            const titleEl = document.getElementById('result-title');
+            const subTitleEl = document.getElementById('result-subtitle');
+            const statsContainer = document.getElementById('result-stats-container');
+
+            statsContainer.innerHTML = '';
+
+            if (selectedMode === 'puyo') {
+                audio.win();
+                titleEl.innerText = "GAME OVER";
+                titleEl.className = "text-2xl md:text-4xl font-extrabold mb-2 glow-yellow text-yellow-300";
+                subTitleEl.innerText = "뿌요뿌요 퍼즐 종료!";
+
+                const prevBest = parseInt(localStorage.getItem('puyo_best_score') || '0');
+                if (puyoBoard.score > prevBest) {
+                    localStorage.setItem('puyo_best_score', puyoBoard.score);
+                    subTitleEl.innerText += " 🎉 최고 점수 경신!";
+                }
+
+                statsContainer.innerHTML = `
+                    <div><span class="text-gray-400 text-[10px]">FINAL SCORE：</span> <span class="text-purple-300 text-lg">${puyoBoard.score.toLocaleString()}</span></div>
+                `;
+            } else {
+                if (winner === 'PLAYER') {
+                    audio.win();
+                    titleEl.innerText = "VICTORY!";
+                    titleEl.className = "text-2xl md:text-4xl font-extrabold mb-2 glow-cyan text-cyan-400";
+                    subTitleEl.innerText = "승리하셨습니다!";
+                } else {
+                    audio.lose();
+                    titleEl.innerText = "GAME OVER";
+                    titleEl.className = "text-2xl md:text-4xl font-extrabold mb-2 glow-magenta text-pink-500";
+                    subTitleEl.innerText = "패배했습니다. 다시 도전해보세요!";
+                }
+            }
+
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        function gameLoop(time) {
+            if (gameState !== 'PLAYING') return;
+
+            const deltaTime = time - lastTime;
+            lastTime = time;
+            elapsedTime = time - startTime;
+
+            if (selectedMode === 'puyo') {
+                puyoBoard.dropCounter += deltaTime;
+                if (puyoBoard.dropCounter > 600) {
+                    puyoBoard.dropCounter = 0;
+                    puyoBoard.drop();
+                }
+                document.getElementById('info-val-1').innerText = `${puyoBoard.chain}연쇄`;
+                document.getElementById('info-val-2').innerText = `${puyoBoard.score.toLocaleString()}`;
+                puyoBoard.draw();
+            } else {
+                let playerSpeed = 600;
+                if (selectedMode === 'marathon') {
+                    playerSpeed = Math.max(80, 800 - (playerBoard.level - 1) * 70);
+                } else if (selectedMode === 'master_20g') {
+                    playerSpeed = 0; // Instant drop
+                }
+
+                // 1. UPDATE PLAYER 1
+                playerBoard.dropCounter += deltaTime;
+
+                if (playerBoard.checkGrounded()) {
+                    playerBoard.isGrounded = true;
+                    playerBoard.lockTimer += deltaTime;
+                    if (playerBoard.lockTimer >= playerBoard.lockDelay) {
+                        const targetOpponent = (selectedMode === 'vs_ai' || selectedMode === 'local_2p') ? aiBoard : (selectedMode === 'vs_puyo_ai' ? puyoAiBoard : null);
+                        const res = playerBoard.lockPiece(targetOpponent);
+                        if (res === 'GAMEOVER') {
+                            triggerGameOver(selectedMode === 'vs_ai' || selectedMode === 'vs_puyo_ai' ? 'AI' : 'LOSE');
+                            return;
+                        }
+                    }
+                } else {
+                    playerBoard.isGrounded = false;
+                    playerBoard.lockTimer = 0;
+                    if (playerBoard.dropCounter > playerSpeed) {
+                        const targetOpponent = (selectedMode === 'vs_ai' || selectedMode === 'local_2p') ? aiBoard : (selectedMode === 'vs_puyo_ai' ? puyoAiBoard : null);
+                        playerBoard.drop(targetOpponent);
+                    }
+                }
+
+                // 2. MODE SPECIFIC LOGIC
+                if (selectedMode === 'garbage_survival') {
+                    garbageTimer += deltaTime;
+                    const remainingSec = Math.max(0, (4000 - garbageTimer) / 1000).toFixed(1);
+                    document.getElementById('info-val-1').innerText = formatTimer(elapsedTime);
+                    document.getElementById('info-val-2').innerText = `${remainingSec}s`;
+
+                    if (garbageTimer >= 4000) {
+                        garbageTimer = 0;
+                        playerBoard.receiveGarbage(1);
+                        showFloatingText(`🌋 GARBAGE RISING!`, 'player-container', 'text-red-400 font-bold');
+                    }
+                } else if (selectedMode === 'sprint') {
+                    document.getElementById('info-val-1').innerText = formatTimer(elapsedTime);
+                    document.getElementById('info-val-2').innerText = `${playerBoard.linesClearedTotal}/40`;
+
+                    if (playerBoard.linesClearedTotal >= 40) {
+                        triggerGameOver('PLAYER');
+                        return;
+                    }
+                } else if (selectedMode === 'marathon' || selectedMode === 'master_20g') {
+                    if (selectedMode === 'marathon') document.getElementById('info-val-1').innerText = `LVL ${playerBoard.level}`;
+                    document.getElementById('info-val-2').innerText = `${playerBoard.linesClearedTotal}`;
+                } else if (selectedMode === 'bomb_tetris') {
+                    document.getElementById('info-val-1').innerText = `${playerBoard.score.toLocaleString()}`;
+                }
+
+                // 3. UPDATE AI 対戦相手
+                if (selectedMode === 'vs_ai') {
+                    aiBoard.dropCounter += deltaTime;
+                    aiBoard.aiMoveCounter += deltaTime;
+
+                    if (!aiBoard.aiTarget && aiBoard.currentPiece) {
+                        aiBoard.aiTarget = TetrisAI.getBestMove(aiBoard, currentAiDiff.errorRate);
+                    }
+
+                    if (aiBoard.aiTarget && aiBoard.aiMoveCounter > currentAiDiff.moveInterval) {
+                        aiBoard.aiMoveCounter = 0;
+                        const { x: targetX, rot: targetRot } = aiBoard.aiTarget;
+
+                        if (aiBoard.currentPiece) {
+                            if (targetRot > 0) {
+                                aiBoard.rotate();
+                                aiBoard.aiTarget.rot--;
+                            } else if (aiBoard.currentPiece.x < targetX) {
+                                aiBoard.moveRight();
+                            } else if (aiBoard.currentPiece.x > targetX) {
+                                aiBoard.moveLeft();
+                            }
+                        }
+                    }
+
+                    if (aiBoard.checkGrounded()) {
+                        aiBoard.isGrounded = true;
+                        aiBoard.lockTimer += deltaTime;
+                        if (aiBoard.lockTimer >= aiBoard.lockDelay) {
+                            const res = aiBoard.lockPiece(playerBoard);
+                            if (res === 'GAMEOVER') {
+                                triggerGameOver('PLAYER');
+                                return;
+                            }
+                        }
+                    } else {
+                        aiBoard.isGrounded = false;
+                        aiBoard.lockTimer = 0;
+                        if (aiBoard.dropCounter > currentAiDiff.dropInterval) {
+                            aiBoard.drop(playerBoard);
+                        }
+                    }
+                } else if (selectedMode === 'vs_puyo_ai') {
+                    puyoAiBoard.aiTimer += deltaTime;
+                    if (puyoAiBoard.aiTimer > 250) {
+                        puyoAiBoard.aiTimer = 0;
+                        puyoAiBoard.stepAI(playerBoard);
+                    }
+                    puyoAiBoard.draw();
+                } else if (selectedMode === 'local_2p') {
+                    aiBoard.dropCounter += deltaTime;
+                    if (aiBoard.checkGrounded()) {
+                        aiBoard.isGrounded = true;
+                        aiBoard.lockTimer += deltaTime;
+                        if (aiBoard.lockTimer >= aiBoard.lockDelay) {
+                            const res = aiBoard.lockPiece(playerBoard);
+                            if (res === 'GAMEOVER') {
+                                triggerGameOver('PLAYER');
+                                return;
+                            }
+                        }
+                    } else {
+                        aiBoard.isGrounded = false;
+                        aiBoard.lockTimer = 0;
+                        if (aiBoard.dropCounter > playerSpeed) {
+                            aiBoard.drop(playerBoard);
+                        }
+                    }
+                }
+
+                // 4. SCORE & UI DISPLAY UPDATE
+                document.getElementById('player-score').innerText = playerBoard.score.toLocaleString();
+                document.getElementById('mode-stat-value').innerText = playerBoard.combo;
+                if (selectedMode === 'vs_ai' || selectedMode === 'local_2p' || selectedMode === 'lan_multi') {
+                    document.getElementById('ai-score').innerText = aiBoard.score.toLocaleString();
+                    document.getElementById('ai-combo').innerText = aiBoard.combo;
+                } else if (selectedMode === 'vs_puyo_ai') {
+                    document.getElementById('ai-score').innerText = puyoAiBoard.score.toLocaleString();
+                    document.getElementById('ai-combo').innerText = puyoAiBoard.chain;
+                }
+
+                // 5. DRAW CANVASES
+                playerBoard.draw();
+                if (selectedMode === 'vs_ai' || selectedMode === 'local_2p' || selectedMode === 'lan_multi') aiBoard.draw();
+            }
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (gameState !== 'PLAYING') return;
+
+            if (selectedMode === 'puyo') {
+                switch (e.key) {
+                    case 'ArrowLeft': case 'a': case 'A': puyoBoard.moveLeft(); break;
+                    case 'ArrowRight': case 'd': case 'D': puyoBoard.moveRight(); break;
+                    case 'ArrowUp': case 'w': case 'W': puyoBoard.rotate(); break;
+                    case 'ArrowDown': case 's': case 'S': puyoBoard.drop(); break;
+                    case ' ': e.preventDefault(); puyoBoard.hardDrop(); break;
+                }
+                return;
+            }
+
+            const targetOpponent = (selectedMode === 'vs_ai' || selectedMode === 'local_2p') ? aiBoard : (selectedMode === 'vs_puyo_ai' ? puyoAiBoard : null);
+
+            // PLAYER 1 CONTROLS
+            switch (e.key) {
+                case 'a': case 'A':
+                case (selectedMode !== 'local_2p' ? 'ArrowLeft' : ''):
+                    playerBoard.moveLeft();
+                    break;
+                case 'd': case 'D':
+                case (selectedMode !== 'local_2p' ? 'ArrowRight' : ''):
+                    playerBoard.moveRight();
+                    break;
+                case 'w': case 'W':
+                case (selectedMode !== 'local_2p' ? 'ArrowUp' : ''):
+                    playerBoard.rotate();
+                    break;
+                case 's': case 'S':
+                case (selectedMode !== 'local_2p' ? 'ArrowDown' : ''):
+                    const dropRes = playerBoard.drop(targetOpponent);
+                    if (dropRes === 'GAMEOVER') triggerGameOver(selectedMode === 'vs_ai' || selectedMode === 'vs_puyo_ai' ? 'AI' : 'LOSE');
+                    break;
+                case ' ':
+                    e.preventDefault();
+                    const hardRes = playerBoard.hardDrop(targetOpponent);
+                    if (hardRes === 'GAMEOVER') triggerGameOver(selectedMode === 'vs_ai' || selectedMode === 'vs_puyo_ai' ? 'AI' : 'LOSE');
+                    break;
+            }
+
+            // PLAYER 2 CONTROLS IN LOCAL 2P MODE
+            if (selectedMode === 'local_2p') {
+                switch (e.key) {
+                    case 'ArrowLeft': aiBoard.moveLeft(); break;
+                    case 'ArrowRight': aiBoard.moveRight(); break;
+                    case 'ArrowUp': aiBoard.rotate(); break;
+                    case 'ArrowDown':
+                        const p2Drop = aiBoard.drop(playerBoard);
+                        if (p2Drop === 'GAMEOVER') triggerGameOver('PLAYER');
+                        break;
+                    case 'Enter':
+                        e.preventDefault();
+                        const p2Hard = aiBoard.hardDrop(playerBoard);
+                        if (p2Hard === 'GAMEOVER') triggerGameOver('PLAYER');
+                        break;
+                }
+            }
+        });
+
+        // Touch Control Helper
+        function bindTouchBtn(btnId, action) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            
+            const handleAction = (e) => {
+                e.preventDefault();
+                if (gameState !== 'PLAYING') return;
+                audio.init();
+                action();
+            };
+
+            btn.addEventListener('touchstart', handleAction, { passive: false });
+            btn.addEventListener('click', handleAction);
+        }
+
+        bindTouchBtn('btn-left', () => selectedMode === 'puyo' ? puyoBoard.moveLeft() : playerBoard.moveLeft());
+        bindTouchBtn('btn-right', () => selectedMode === 'puyo' ? puyoBoard.moveRight() : playerBoard.moveRight());
+        bindTouchBtn('btn-rotate', () => selectedMode === 'puyo' ? puyoBoard.rotate() : playerBoard.rotate());
+        bindTouchBtn('btn-soft', () => {
+            const targetOpponent = (selectedMode === 'vs_ai' || selectedMode === 'local_2p') ? aiBoard : (selectedMode === 'vs_puyo_ai' ? puyoAiBoard : null);
+            if (selectedMode === 'puyo') puyoBoard.drop();
+            else {
+                const res = playerBoard.drop(targetOpponent);
+                if (res === 'GAMEOVER') triggerGameOver(selectedMode === 'vs_ai' || selectedMode === 'vs_puyo_ai' ? 'AI' : 'LOSE');
+            }
+        });
+        bindTouchBtn('btn-hard', () => {
+            const targetOpponent = (selectedMode === 'vs_ai' || selectedMode === 'local_2p') ? aiBoard : (selectedMode === 'vs_puyo_ai' ? puyoAiBoard : null);
+            if (selectedMode === 'puyo') puyoBoard.hardDrop();
+            else {
+                const res = playerBoard.hardDrop(targetOpponent);
+                if (res === 'GAMEOVER') triggerGameOver(selectedMode === 'vs_ai' || selectedMode === 'vs_puyo_ai' ? 'AI' : 'LOSE');
+            }
+        });
+
+        window.onload = () => {
+            loadRecords();
+            playerBoard.draw();
+            aiBoard.draw();
+            updateHighestTitle();
+            renderQuestsList();
+        };
+    </script>
+</body>
+</html>
